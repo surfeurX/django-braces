@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+import re
+from django.core.cache import get_cache
+from django.views.generic.base import TemplateResponseMixin
 from django.core.exceptions import ImproperlyConfigured
 from django.core.urlresolvers import resolve
 from django.shortcuts import redirect
@@ -5,6 +9,7 @@ from django.utils.encoding import force_text
 
 
 class SetHeadlineMixin(object):
+
     """
     Mixin allows you to set a static headline through a static property on the
     class or programmatically by overloading the get_headline method.
@@ -29,6 +34,7 @@ class SetHeadlineMixin(object):
 
 
 class StaticContextMixin(object):
+
     """
     Mixin allows you to set static context through a static property on
     the class.
@@ -58,6 +64,7 @@ class StaticContextMixin(object):
 
 
 class CanonicalSlugDetailMixin(object):
+
     """
     A mixin that enforces a canonical slug in the url.
 
@@ -65,6 +72,7 @@ class CanonicalSlugDetailMixin(object):
     argument does not equal the object's canonical slug, this mixin will
     redirect to the url containing the canonical slug.
     """
+
     def dispatch(self, request, *args, **kwargs):
         # Set up since we need to super() later instead of earlier.
         self.request = request
@@ -109,6 +117,7 @@ class CanonicalSlugDetailMixin(object):
 
 
 class AllVerbsMixin(object):
+
     """Call a single method for all HTTP verbs.
 
     The name of the method should be specified using the class attribute
@@ -124,3 +133,46 @@ class AllVerbsMixin(object):
 
         handler = getattr(self, self.all_handler, self.http_method_not_allowed)
         return handler(request, *args, **kwargs)
+
+
+class CacheMixin(TemplateResponseMixin):
+    cache_timeout = 600
+
+    def get_cache_timeout(self):
+        if isinstance(self.cache_timeout, int):
+            return self.cache_timeout
+        match = re.match(r"(?P<count>\d+)(?P<time>[dhm])", self.cache_timeout)
+        count = match.group("count")
+        time = match.group("time")
+        if time == "m":
+            seconds = 60
+        elif time == "h":
+            seconds = 3600
+        elif time == "d":
+            seconds = 86400
+        return seconds * int(count)
+
+    def render_to_response(self, context, **response_kwargs):
+        response = super(CacheMixin, self).render_to_response(
+            context, **response_kwargs)
+        if response.streaming or response.status_code != 200:
+            return response
+
+        def update_cache(key, value, timeout):
+            """ add_post_render_callback modify the response
+                if this function return other than None
+            """
+            cache = get_cache("default")
+            cache.set(key, value, timeout)
+            return None
+
+        timeout = self.get_cache_timeout()
+        cache_key = self.request.META["PATH_INFO"]
+        if hasattr(response, 'render') and callable(response.render):
+            response.add_post_render_callback(
+                lambda r: update_cache(
+                    key=cache_key, value=response, timeout=timeout)
+            )
+        else:
+            update_cache(key=cache_key, value=response, timeout=timeout)
+        return response

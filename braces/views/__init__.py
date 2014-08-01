@@ -30,7 +30,8 @@ from ._other import (
     AllVerbsMixin,
     CanonicalSlugDetailMixin,
     SetHeadlineMixin,
-    StaticContextMixin
+    StaticContextMixin,
+    CacheMixin
 )
 from ._queries import (
     OrderableListMixin,
@@ -44,6 +45,7 @@ __all__ = [
     'AnonymousRequiredMixin',
     'CanonicalSlugDetailMixin',
     'CsrfExemptMixin',
+    'CacheMixin',
     'FormInvalidMessageMixin',
     'FormMessagesMixin',
     'FormValidMessageMixin',
